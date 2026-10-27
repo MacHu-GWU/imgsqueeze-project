@@ -86,6 +86,7 @@ Download = "https://pypi.org/pypi/imgsqueeze#files"
 
 # Read: https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#creating-executable-scripts
 [project.scripts]
+imgsqueeze = "imgsqueeze.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -5,7 +5,6 @@ omit =
     imgsqueeze/docs/*
     imgsqueeze/tests/*
     imgsqueeze/vendor/*
-    imgsqueeze/cli.py
     imgsqueeze/paths.py
 
 [report]
