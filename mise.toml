@@ -56,6 +56,11 @@ depends = ["inst"]
 description = "👀📊 Open code coverage HTML report in browser (requires 'cov' task to run first)"
 run = "open htmlcov/index.html"
 
+[tasks.calibrate]
+description = "👀🖼️ Compress sample images with every preset into a side-by-side HTML page (tmp/calibration/)"
+run = ".venv/bin/python .mise/tasks/calibrate-presets.py"
+depends = ["inst"]
+
 # Code Quality
 [tasks.format]
 description = "🎨 Format all Python code with ruff (package, tests, mise task scripts, pywf-oss skill scripts)"
