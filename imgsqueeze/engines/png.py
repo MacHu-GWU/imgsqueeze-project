@@ -3,10 +3,15 @@
 """
 Compress a PNG with pngquant (lossy), then oxipng (lossless).
 
-pngquant may decline to quantize: exit code 98 means the result would be
-larger, 99 means the quality floor cannot be reached. Both are normal, and
-oxipng then runs on the source image instead. Deciding whether the result is
-worth keeping (``min_gain``) is the caller's job.
+Both tools drop the EXIF orientation, so an image whose orientation is not 1
+is first rotated by Pillow (step 0). pngquant may decline to quantize: exit
+code 98 means the result would be larger, 99 means the quality floor cannot be
+reached. Both are normal, and oxipng then runs on the step 0 image instead.
+
+An ICC profile is kept as follows: pngquant converts the pixels to sRGB and
+tags the output sRGB, and oxipng keeps the profile when pngquant declined.
+
+Deciding whether the result is worth keeping (``min_gain``) is the caller's job.
 """
 
 from __future__ import annotations
@@ -15,6 +20,10 @@ import dataclasses
 import subprocess
 
 from pathlib import Path
+
+from PIL import ExifTags
+from PIL import Image
+from PIL import ImageOps
 
 from ..presets import Preset
 
@@ -35,12 +44,14 @@ class PngResult:
     # fmt: off
     path: Path  #: The compressed file, inside the work directory.
     quantized: bool  #: ``False`` when pngquant declined (exit code 98 or 99).
+    oriented: bool  #: ``True`` when the EXIF orientation was applied to the pixels.
     # fmt: on
 
 
 class PngEngineError(Exception):
     """
-    Raised when pngquant or oxipng fails, times out, or cannot be run.
+    Raised when the source cannot be decoded, or when pngquant or oxipng
+    fails, times out, or cannot be run.
     """
 
 
@@ -64,8 +75,12 @@ def compress_png(
     :param oxipng: path of the oxipng binary.
     :raises PngEngineError: if either tool fails.
     """
+    oriented_path = workdir / "oriented.png"
     quantized_path = workdir / "pngquant.png"
     optimized_path = workdir / "oxipng.png"
+    oriented = _apply_orientation(src, oriented_path)
+    if oriented:
+        src = oriented_path
     low, high = preset.png_quality
     result = _run(
         [
@@ -107,7 +122,29 @@ def compress_png(
     )
     if result.returncode != 0:
         raise PngEngineError(_failure("oxipng", result))
-    return PngResult(path=optimized_path, quantized=quantized)
+    return PngResult(path=optimized_path, quantized=quantized, oriented=oriented)
+
+
+def _apply_orientation(src: Path, dst: Path) -> bool:
+    """
+    Write ``src`` rotated upright to ``dst``, keeping its ICC profile.
+
+    Return ``False``, writing nothing, when the orientation is missing or 1.
+    """
+    try:
+        with Image.open(src) as image:
+            orientation = image.getexif().get(ExifTags.Base.Orientation, 1)
+            if orientation == 1:
+                return False
+            upright = ImageOps.exif_transpose(image)
+            icc_profile = image.info.get("icc_profile")
+            if icc_profile:
+                upright.save(dst, format="PNG", icc_profile=icc_profile)
+            else:
+                upright.save(dst, format="PNG")
+    except OSError as e:
+        raise PngEngineError(f"cannot decode {src}: {e}") from e
+    return True
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
