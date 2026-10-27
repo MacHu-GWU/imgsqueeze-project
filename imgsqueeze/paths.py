@@ -42,6 +42,8 @@ class PathEnum:
     dir_htmlcov = dir_project_root / "htmlcov"
     path_cov_index_html = dir_htmlcov / "index.html"
     dir_unit_test = dir_project_root / "tests"
+    dir_unit_test_img_raw = dir_unit_test / "img-raw"  # read-only sample images
+    dir_unit_test_tmp = dir_unit_test / "tmp"  # git-ignored, copies made by tests
     dir_int_test = dir_project_root / "tests_int"
     dir_load_test = dir_project_root / "tests_load"
 
