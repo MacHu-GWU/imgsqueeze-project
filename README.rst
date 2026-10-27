@@ -102,6 +102,20 @@ To install pngquant and oxipng ahead of time:
     $ imgsqueeze setup
 
 
+.. _use-with-ai-coding-agents:
+
+Use with AI Coding Agents
+------------------------------------------------------------------------------
+
+This repo ships an `Agent Skill <https://code.claude.com/docs/en/skills>`_ that documents the public API of ``imgsqueeze``, so an AI coding agent such as Claude Code can use the library without reading its source. It lives in `.claude/skills/pypi-imgsqueeze <https://github.com/MacHu-GWU/imgsqueeze-project/tree/main/.claude/skills/pypi-imgsqueeze>`_. To use it in your project, copy it into your project's ``.claude/skills/`` folder. Run this from your project's root:
+
+.. code-block:: console
+
+    $ git clone --depth 1 https://github.com/MacHu-GWU/imgsqueeze-project.git /tmp/imgsqueeze-project
+    $ mkdir -p .claude/skills
+    $ cp -R /tmp/imgsqueeze-project/.claude/skills/pypi-imgsqueeze .claude/skills/
+
+
 License
 ------------------------------------------------------------------------------
 ``imgsqueeze`` is MIT licensed. It runs pngquant, by Kornel Lesiński and
