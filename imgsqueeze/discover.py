@@ -5,7 +5,8 @@ Expand the inputs into image files, then split them into pending and done.
 
 Files given directly are always included. Directories are searched
 recursively for image extensions, skipping hidden subdirectories such as
-``.git``.
+``.git``. Symlinks are skipped everywhere: imgsqueeze only touches regular
+files and directories.
 """
 
 from __future__ import annotations
@@ -65,14 +66,17 @@ def expand_inputs(inputs: list[Path]) -> list[Path]:
     Return the real paths of all image candidates, in a stable order.
 
     Each input is a file, which is kept whatever its extension, or a directory,
-    which is searched recursively. Inputs that do not exist are kept, so the
-    caller can report them as errors. Duplicates are removed after resolving
-    symlinks.
+    which is searched recursively. A symlink, given directly or found inside a
+    directory, is skipped. Inputs that do not exist are kept, so the caller can
+    report them as errors. Duplicates, such as the same file given twice, are
+    removed after resolving each path with ``os.path.realpath``.
 
     :param inputs: files and directories given by the user.
     """
     candidates: list[Path] = []
     for item in inputs:
+        if item.is_symlink():
+            continue
         if item.is_dir():
             candidates.extend(_walk_images(item))
         else:
@@ -84,9 +88,9 @@ def triage(paths: list[Path]) -> Triage:
     """
     Split the paths into pending images and images whose sidecar matches.
 
-    A path that is not a regular file is pending, so the caller reports it as
-    an error. A sidecar that cannot be read is ignored, and the image is pending
-    with a warning.
+    A path that is not a regular file, or cannot be read, is pending, so the
+    worker reports the real error. A sidecar that cannot be parsed is ignored,
+    and the image is pending with a warning saying why.
 
     :param paths: real paths, as returned by :func:`expand_inputs`.
     """
@@ -102,8 +106,8 @@ def triage(paths: list[Path]) -> Triage:
         except InvalidSidecarError as e:
             pending.append(Pending(path=path, warning=str(e)))
             continue
-        except OSError as e:
-            pending.append(Pending(path=path, warning=f"cannot read {path}: {e}"))
+        except OSError:
+            pending.append(Pending(path=path, warning=None))
             continue
         if sidecar is None:
             pending.append(Pending(path=path, warning=None))
@@ -114,11 +118,18 @@ def triage(paths: list[Path]) -> Triage:
 
 def _walk_images(top: Path) -> list[Path]:
     found: list[Path] = []
+    # os.walk does not descend into symlinked directories by default, but it
+    # still lists them in dirnames and lists symlinked files in filenames.
     for root, dirnames, filenames in os.walk(top):
-        dirnames[:] = sorted(name for name in dirnames if not name.startswith("."))
+        dirnames[:] = sorted(
+            name
+            for name in dirnames
+            if not name.startswith(".") and not os.path.islink(os.path.join(root, name))
+        )
         for name in sorted(filenames):
-            if name.lower().endswith(IMAGE_SUFFIXES):
-                found.append(Path(root) / name)
+            path = Path(root) / name
+            if name.lower().endswith(IMAGE_SUFFIXES) and not path.is_symlink():
+                found.append(path)
     return found
 
 

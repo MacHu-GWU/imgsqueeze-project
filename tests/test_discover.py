@@ -56,11 +56,32 @@ def test_expand_keeps_missing_path(tmp_path):
     assert expand_inputs([missing]) == [missing.resolve()]
 
 
-def test_expand_dedupes_symlink_and_original(tmp_path):
+def test_expand_skips_symlinked_file_in_directory(tmp_path):
+    real = _make(tmp_path / "cover.png")
+    os.symlink(real, tmp_path / "link.png")
+    assert expand_inputs([tmp_path]) == [real.resolve()]
+
+
+def test_expand_skips_symlink_given_directly(tmp_path):
     real = _make(tmp_path / "cover.png")
     link = tmp_path / "link.png"
     os.symlink(real, link)
-    assert expand_inputs([real, link, tmp_path]) == [real.resolve()]
+    assert expand_inputs([link]) == []
+
+
+def test_expand_skips_symlinked_directory(tmp_path):
+    outside = _make(tmp_path / "outside" / "photo.jpg")
+    root = tmp_path / "blog"
+    image = _make(root / "cover.png")
+    os.symlink(outside.parent, root / "linked-dir")
+    assert expand_inputs([root]) == [image.resolve()]
+    assert expand_inputs([root / "linked-dir"]) == []
+
+
+def test_expand_dedupes_same_file_given_twice(tmp_path):
+    image = _make(tmp_path / "sub" / "cover.png")
+    same = tmp_path / "sub" / ".." / "sub" / "cover.png"
+    assert expand_inputs([image, same, tmp_path]) == [image.resolve()]
 
 
 def test_expand_keeps_first_seen_order(tmp_path):
@@ -126,7 +147,8 @@ def test_triage_missing_path_is_pending_without_warning(tmp_path):
     assert result.pending == [Pending(path=missing, warning=None)]
 
 
-def test_triage_unreadable_file_is_pending_with_warning(tmp_path, monkeypatch):
+def test_triage_unreadable_file_is_pending_without_warning(tmp_path, monkeypatch):
+    # the worker reads the file again and reports the real error
     image = _make(tmp_path / "cover.png")
 
     def fail(path):
@@ -134,8 +156,7 @@ def test_triage_unreadable_file_is_pending_with_warning(tmp_path, monkeypatch):
 
     monkeypatch.setattr(discover_module, "sha256_file", fail)
     result = triage([image.resolve()])
-    assert result.pending[0].path == image.resolve()
-    assert "denied" in result.pending[0].warning
+    assert result.pending == [Pending(path=image.resolve(), warning=None)]
 
 
 if __name__ == "__main__":
