@@ -6,7 +6,7 @@ What this library does: see `README.rst`.
 
 Package: `imgsqueeze/` (import name `imgsqueeze`).
 
-How to maintain this library: the `maintain-imgsqueeze-*` skills, once they exist (create them with `pywf-oss-write-maintain-skill`).
+How to maintain this library: load `maintain-imgsqueeze-base` before changing code, tests, or CI (update it with `pywf-oss-write-maintain-skill`). How to use it: the `pypi-imgsqueeze` skill.
 
 <!-- END project block -->
 
@@ -49,6 +49,8 @@ This repo follows the pywf open-source Python library template. **Before creatin
 | Upgrade or replace dependencies | `pywf-oss-upgrade-deps` |
 | Install an optional community skill, or catalog one | `pywf-oss-add-community-skill` |
 | Check the repo against the template | `pywf-oss-audit` |
+| Upgrade the pinned pngquant or oxipng | `maintain-imgsqueeze-bump-tool` |
+| Recalibrate the quality presets | `maintain-imgsqueeze-calibrate` |
 | Not sure which | `pywf-oss-base` |
 
 <!-- END pywf-oss template block -->
