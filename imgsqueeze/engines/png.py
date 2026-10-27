@@ -142,7 +142,7 @@ def _apply_orientation(src: Path, dst: Path) -> bool:
                 upright.save(dst, format="PNG", icc_profile=icc_profile)
             else:
                 upright.save(dst, format="PNG")
-    except OSError as e:
+    except (OSError, Image.DecompressionBombError) as e:
         raise PngEngineError(f"cannot decode {src}: {e}") from e
     return True
 
