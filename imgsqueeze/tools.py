@@ -97,7 +97,7 @@ def resolve_tool(spec: ToolSpec) -> ResolvedTool:
     ``mise which --tool``, and installed with ``mise install`` first if missing.
     PATH is never searched for the tool itself.
 
-    :param spec: the tool to resolve, such as :data:`PNGQUANT`.
+    :param spec: the tool to resolve, such as :attr:`~imgsqueeze.tools.PNGQUANT`.
     :raises ToolUnavailableError: if the binary cannot be found, installed, or run.
     """
     override = os.environ.get(spec.env_var)

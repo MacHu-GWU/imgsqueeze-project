@@ -60,7 +60,7 @@ class CheckItem:
 @dataclasses.dataclass(frozen=True)
 class PinItem:
     """
-    What :func:`pin` did with one image.
+    What :func:`~imgsqueeze.housekeeping.pin` did with one image.
     """
 
     # fmt: off
@@ -73,7 +73,7 @@ class PinItem:
 @dataclasses.dataclass(frozen=True)
 class DoctorReport:
     """
-    Problems found by :func:`doctor`.
+    Problems found by :func:`~imgsqueeze.housekeeping.doctor`.
     """
 
     # fmt: off

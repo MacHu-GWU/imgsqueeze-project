@@ -7,8 +7,9 @@ original and each preset stacked below it.
 
 Usage: ``mise run calibrate [-- --input DIR] [-- --output DIR]``. The input
 images are never modified. The page goes to ``tmp/calibration/index.html`` by
-default, which git ignores, and the images it shows go to ``images/`` next
-to it, as ordinary files that can be opened on their own. Every preset is
+default, which git ignores. The images go to ``images/`` next to it as
+ordinary files, mirroring the input tree: ``<input>/sub/cover.png`` becomes
+``images/sub/cover.png/original.png``, ``light.png`` and so on. Every preset is
 shown, even when ``min_gain`` would keep the original.
 """
 
@@ -81,9 +82,14 @@ def main() -> None:
     if images.exists():
         shutil.rmtree(images)  # only the folder this script owns
     images.mkdir(parents=True)
+    # expand_inputs returns real paths, so the root must be a real path too.
+    root = args.input.resolve()
+    if not root.is_dir():
+        root = root.parent
     png_tools = None
     sections = []
-    for index, src in enumerate(expand_inputs([args.input]), start=1):
+    for src in expand_inputs([args.input]):
+        relative = src.relative_to(root)
         data = src.read_bytes()
         fmt = detect_format(data)
         if fmt is None:
@@ -91,8 +97,11 @@ def main() -> None:
             continue
         if fmt == "png" and png_tools is None:
             png_tools = (resolve_tool(PNGQUANT).path, resolve_tool(OXIPNG).path)
-        folder = images / f"{index:02d}-{src.stem}"
-        folder.mkdir()
+        # Mirror the input tree, one folder per image named after the file,
+        # e.g. sub/cover.png -> images/sub/cover.png/original.png, so neither
+        # sub/cover.png and other/cover.png nor cover.png and cover.jpg collide.
+        folder = images / relative
+        folder.mkdir(parents=True)
         suffix = src.suffix.lower()
         original = folder / f"original{suffix}"
         original.write_bytes(data)
@@ -121,9 +130,9 @@ def main() -> None:
             change = f"{gain:.1%} saved" if gain >= 0 else f"{-gain:.1%} larger"
             info = f"{_size(after)}, {change}, {verdict}"
             figures.append(_figure(preset.name, _url(result, args.output), True, info))
-            print(f"{preset.name:<10} {gain:7.1%}  {src.name}")
+            print(f"{preset.name:<10} {gain:7.1%}  {relative}")
         sections.append(
-            f"<section>\n<h2>{html.escape(src.name)} ({fmt})</h2>\n"
+            f"<section>\n<h2>{html.escape(relative.as_posix())} ({fmt})</h2>\n"
             f"{''.join(figures)}</section>\n"
         )
     page = args.output / "index.html"

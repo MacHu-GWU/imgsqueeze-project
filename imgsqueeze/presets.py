@@ -2,6 +2,9 @@
 
 """
 Three compression presets, and the default minimum gain per image format.
+
+The values were calibrated by eye with ``mise run calibrate``, which shows
+every preset next to the original.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ class Preset:
     # fmt: on
 
 
+#: Every preset by name: ``light``, ``normal`` (the default) and ``aggressive``.
 PRESETS: dict[str, Preset] = {
     "light": Preset(
         name="light",

@@ -40,7 +40,7 @@ from .tools import ToolUnavailableError
 @dataclasses.dataclass(frozen=True)
 class Report:
     """
-    The outcome of :func:`optimize`.
+    The outcome of :func:`~imgsqueeze.runner.optimize`.
     """
 
     # fmt: off

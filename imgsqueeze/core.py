@@ -110,7 +110,7 @@ class Job:
 @dataclasses.dataclass(frozen=True)
 class Result:
     """
-    The outcome of :func:`process` for one image.
+    The outcome of :func:`~imgsqueeze.core.process` for one image.
     """
 
     # fmt: off
