@@ -11,6 +11,9 @@ outcome is a :class:`Result` with one of the statuses below.
 Concurrency control is optimistic: the hash ``H0`` of the content read at the
 start must still match the file right before the file or sidecar is written.
 Otherwise another process changed the file, and the result is ``conflict``.
+
+An existing ``<image>.json`` that is not a valid sidecar is never overwritten:
+it may be the user's own file, so the image fails with ``error`` instead.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ from .detect import FORMAT_JPEG
 from .detect import FORMAT_PNG
 from .detect import FORMAT_WEBP
 from .detect import is_animated
+from .detect import unsupported_reason
 from .engines.jpeg import compress_jpeg
 from .engines.jpeg import JpegEngineError
 from .engines.png import compress_png
@@ -43,6 +47,7 @@ from .sidecar import find_done
 from .sidecar import InvalidSidecarError
 from .sidecar import sha256_file
 from .sidecar import Sidecar
+from .sidecar import sidecar_path
 from .sidecar import STATUS_NO_GAIN
 from .sidecar import STATUS_OPTIMIZED
 from .sidecar import write_sidecar
@@ -92,9 +97,10 @@ class Job:
     """
     Everything a worker needs to process one image.
 
-    Exactly one of ``png_tools`` and ``png_tools_error`` is set: the tools are
-    resolved once in the main process, and a PNG fails with the error message
-    when they are unavailable.
+    The PNG tools are resolved once in the main process, only when a pending
+    image is a PNG: then exactly one of ``png_tools`` and ``png_tools_error``
+    is set, and a PNG fails with the error message when the tools are
+    unavailable. Otherwise both are ``None``.
     """
 
     # fmt: off
@@ -145,13 +151,25 @@ def tool_version() -> str:
 
 def process(job: Job) -> Result:
     """
-    Process one image and return what happened. Never raises for problems
-    with the file itself.
+    Process one image and return what happened. Never raises: an unexpected
+    exception becomes an ``error`` result, so one image cannot break a batch.
 
     :param job: the image and settings.
     """
-    path = job.path
     warnings: list[str] = []
+    try:
+        return _process(job, warnings)
+    except Exception as e:
+        return Result(
+            path=job.path,
+            status=STATUS_ERROR,
+            error=f"unexpected {type(e).__name__}: {e}",
+            warnings=tuple(warnings),
+        )
+
+
+def _process(job: Job, warnings: list[str]) -> Result:
+    path = job.path
 
     def result(status: str, **kwargs) -> Result:
         return Result(path=path, status=status, warnings=tuple(warnings), **kwargs)
@@ -167,8 +185,13 @@ def process(job: Job) -> Result:
     try:
         done = find_done(path, h0)
     except InvalidSidecarError as e:
-        warnings.append(f"ignored the sidecar: {e}")
-        done = None
+        return result(
+            STATUS_ERROR,
+            error=f"{sidecar_path(path)} exists and is not a valid imgsqueeze "
+            f"sidecar; move or delete it ({e})",
+        )
+    except OSError as e:
+        return result(STATUS_ERROR, error=f"cannot read the sidecar: {e}")
     if done is not None:
         return result(
             STATUS_ALREADY_DONE,
@@ -185,7 +208,7 @@ def process(job: Job) -> Result:
     except (OSError, Image.DecompressionBombError) as e:
         return result(STATUS_ERROR, error=f"Pillow cannot open {path}: {e}")
     if fmt is None:
-        return result(STATUS_UNSUPPORTED, error="not a PNG, JPEG or WebP image")
+        return result(STATUS_UNSUPPORTED, error=unsupported_reason(data))
     if animated:
         return result(STATUS_UNSUPPORTED, format=fmt, error="animated image")
     if _SUFFIX_FORMATS.get(path.suffix.lower()) != fmt:
@@ -194,6 +217,11 @@ def process(job: Job) -> Result:
             f"processed as {fmt.upper()} and kept the file name"
         )
     if fmt == FORMAT_PNG and job.png_tools is None:
+        if job.png_tools_error is None:
+            # The batch saw no PNG, so it resolved no tools: the file changed
+            # into a PNG after triage.
+            warnings.append("the file became a PNG after the run started")
+            return result(STATUS_CONFLICT, format=fmt)
         return result(
             STATUS_ERROR, format=fmt, error=job.png_tools_error, missing_tools=True
         )
@@ -267,18 +295,24 @@ def _unchanged(path: Path, h0: str) -> bool:
 def _replace(path: Path, new_content: Path, h0: str) -> bool:
     """
     Replace ``path`` with ``new_content``, keeping its permissions, unless it
-    changed since it was read. Return ``False`` on such a conflict.
+    changed since it was read, or is gone. Return ``False`` on such a conflict.
 
     The new content is first copied into a hidden temporary file next to
-    ``path``, because ``os.replace`` is only atomic within one file system.
+    ``path``, because ``os.replace`` is only atomic within one file system,
+    and flushed to disk, so a power loss cannot leave a truncated image.
     """
-    mode = stat.S_IMODE(path.stat().st_mode)
+    try:
+        mode = stat.S_IMODE(path.stat().st_mode)
+    except FileNotFoundError:
+        return False
     fd, tmp_name = tempfile.mkstemp(
         dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
     )
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(new_content.read_bytes())
+            f.flush()
+            os.fsync(f.fileno())
         os.chmod(tmp_name, mode)
         if not _unchanged(path, h0):
             return False

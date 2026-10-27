@@ -169,13 +169,15 @@ class TestSkipAndWarn:
         assert result.preset is None
         assert path.read_bytes() == content
 
-    def test_invalid_sidecar_is_ignored_with_warning(self, img_dir):
+    def test_foreign_json_is_never_overwritten(self, img_dir):
         path = img_dir / JPEG
-        sidecar_path(path).write_text("{", encoding="utf-8")
+        content = path.read_bytes()
+        sidecar_path(path).write_text('{"prompt": "cat"}', encoding="utf-8")
         result = process(_job(path))
-        assert result.status == STATUS_OPTIMIZED
-        assert len(result.warnings) == 1
-        assert "ignored the sidecar" in result.warnings[0]
+        assert result.status == STATUS_ERROR
+        assert "is not a valid imgsqueeze sidecar; move or delete it" in result.error
+        assert path.read_bytes() == content
+        assert sidecar_path(path).read_text(encoding="utf-8") == '{"prompt": "cat"}'
 
     def test_webp_named_png_is_processed_as_webp(self, img_dir):
         path = img_dir / "disguised.png"
@@ -193,6 +195,15 @@ class TestUnsupportedAndErrors:
         result = process(_job(path))
         assert result.status == STATUS_UNSUPPORTED
         assert result.format is None
+        assert result.error == "GIF is not a PNG, JPEG or WebP image"
+
+    def test_mpo_is_unsupported_with_a_clear_reason(self, tmp_path):
+        path = tmp_path / "phone.jpg"
+        frames = [Image.new("RGB", (8, 8), color) for color in ("red", "blue")]
+        frames[0].save(path, format="MPO", save_all=True, append_images=frames[1:])
+        result = process(_job(path))
+        assert result.status == STATUS_UNSUPPORTED
+        assert result.error == "multi-picture JPEG (MPO) is not supported"
 
     def test_animated_webp_is_unsupported(self, tmp_path):
         path = tmp_path / "anim.webp"
@@ -242,6 +253,25 @@ class TestUnsupportedAndErrors:
         assert result.missing_tools is True
         assert result.error == MISSING_TOOLS
         assert path.read_bytes() == content
+
+    def test_unreadable_sidecar(self, img_dir, monkeypatch):
+        def fail(image_path, sha256):
+            raise PermissionError("denied")
+
+        monkeypatch.setattr(core_module, "find_done", fail)
+        result = process(_job(img_dir / JPEG))
+        assert result.status == STATUS_ERROR
+        assert result.error == "cannot read the sidecar: denied"
+
+    def test_unexpected_exception_is_an_error(self, img_dir, monkeypatch):
+        def fail(*args):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(core_module, "_compress", fail)
+        result = process(_job(img_dir / JPEG))
+        assert result.status == STATUS_ERROR
+        assert result.error == "unexpected RuntimeError: boom"
+        assert _hidden_files(img_dir) == []
 
     def test_jpeg_needs_no_png_tools(self, img_dir):
         result = process(_job(img_dir / JPEG))
@@ -294,8 +324,10 @@ class TestConflict:
         assert not sidecar_path(path).exists()
         assert _hidden_files(img_dir) == []
 
-    def test_file_deleted_during_compression(self, img_dir, monkeypatch):
-        path = img_dir / WEBP
+    @pytest.mark.parametrize("name", [JPEG, WEBP])
+    def test_file_deleted_during_compression(self, img_dir, monkeypatch, name):
+        # JPEG reaches the replace step, WebP the no_gain step.
+        path = img_dir / name
         compress = core_module._compress
 
         def compress_while_someone_deletes(*args):
@@ -305,6 +337,15 @@ class TestConflict:
 
         monkeypatch.setattr(core_module, "_compress", compress_while_someone_deletes)
         assert process(_job(path)).status == STATUS_CONFLICT
+        assert not sidecar_path(path).exists()
+        assert _hidden_files(img_dir) == []
+
+    def test_file_became_png_after_the_batch_started(self, img_dir):
+        # The batch saw no PNG, so it resolved no tools.
+        result = process(_job(img_dir / PNG, png_tools_error=None))
+        assert result.status == STATUS_CONFLICT
+        assert result.missing_tools is False
+        assert "became a PNG" in result.warnings[0]
 
 
 if __name__ == "__main__":

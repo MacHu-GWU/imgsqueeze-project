@@ -45,6 +45,12 @@ def test_expand_skips_hidden_subdirectories(tmp_path):
     assert expand_inputs([tmp_path]) == [visible.resolve()]
 
 
+def test_expand_skips_apple_double_files(tmp_path):
+    image = _make(tmp_path / "cover.png")
+    _make(tmp_path / "._cover.png")
+    assert expand_inputs([tmp_path]) == [image.resolve()]
+
+
 def test_expand_hidden_input_directory_itself_is_searched(tmp_path):
     hidden_root = tmp_path / ".assets"
     image = _make(hidden_root / "cover.png")
@@ -141,13 +147,17 @@ def test_triage_invalid_sidecar_is_pending_with_warning(tmp_path):
     assert result.done == []
 
 
-def test_triage_missing_path_is_pending_without_warning(tmp_path):
+def test_triage_missing_path_is_pending_with_reason(tmp_path):
     missing = (tmp_path / "gone.png").resolve()
-    result = triage([missing])
-    assert result.pending == [Pending(path=missing, warning=None)]
+    folder = tmp_path.resolve()
+    result = triage([missing, folder])
+    assert result.pending == [
+        Pending(path=missing, warning=f"{missing} does not exist"),
+        Pending(path=folder, warning=f"{folder} is not a regular file"),
+    ]
 
 
-def test_triage_unreadable_file_is_pending_without_warning(tmp_path, monkeypatch):
+def test_triage_unreadable_file_is_pending_with_reason(tmp_path, monkeypatch):
     # the worker reads the file again and reports the real error
     image = _make(tmp_path / "cover.png")
 
@@ -156,7 +166,9 @@ def test_triage_unreadable_file_is_pending_without_warning(tmp_path, monkeypatch
 
     monkeypatch.setattr(discover_module, "sha256_file", fail)
     result = triage([image.resolve()])
-    assert result.pending == [Pending(path=image.resolve(), warning=None)]
+    assert result.pending == [
+        Pending(path=image.resolve(), warning="cannot read: denied")
+    ]
 
 
 if __name__ == "__main__":

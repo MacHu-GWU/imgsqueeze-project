@@ -58,8 +58,9 @@ The sidecar of ``cover.png`` is ``cover.png.json``:
       - The ``imgsqueeze`` version that wrote it.
 
 The file is written once, with sorted keys, and never rewritten, so upgrading
-``imgsqueeze`` does not change it in git. A sidecar that cannot be parsed is
-ignored with a warning, and the image is processed as a new one. If a static
+``imgsqueeze`` does not change it in git. An ``<image>.json`` that is not a
+valid sidecar is never overwritten, since it may be your own file: the image
+is reported as ``error`` until you move or delete that file. If a static
 site generator copies the image folder to its output, exclude ``*.json``
 there if needed.
 
@@ -136,9 +137,12 @@ External tools
 
 pngquant 3.0.3 and oxipng 10.2.1 are pinned, so every machine produces the
 same result. ``imgsqueeze`` finds them with
-``mise which <tool> --tool <tool>@<version>``, and installs a missing one with
-``mise install``. Neither command changes any mise configuration, and
-``imgsqueeze`` never looks for these tools on ``PATH``. To use another binary,
+``mise which <name> --tool <mise tool>@<version>``, such as
+``mise which pngquant --tool conda:pngquant@3.0.3``, and installs a missing
+one with ``mise install``. Neither command changes any mise configuration.
+Both run in an empty temporary folder, so a ``mise.toml`` in your project,
+even a broken or untrusted one, cannot get in the way. ``imgsqueeze`` never
+looks for these tools on ``PATH``. To use another binary,
 set ``IMGSQUEEZE_PNGQUANT`` or ``IMGSQUEEZE_OXIPNG`` to its path; it must be
 at least the pinned version.
 
@@ -150,12 +154,14 @@ images it produces are not covered by its license.
 Safety
 ------------------------------------------------------------------------------
 
-- The compressed file replaces the original atomically (``os.replace``),
-  keeping its file permissions, so an image is never half-written.
+- The compressed file is flushed to disk, then replaces the original
+  atomically (``os.replace``), keeping its file permissions, so an image is
+  never half-written.
 - Before replacing an image or writing a sidecar, ``imgsqueeze`` hashes the
   image again. If another process changed it in the meantime, the result is
   discarded and reported as ``conflict``.
 - Symbolic links are skipped, both given directly and found in folders.
 - If a run stops between replacing an image and writing its sidecar, the
-  next run compresses the image once more; that second pass ends as
-  ``no_gain``, so the image does not change again.
+  next run compresses the image once more. With the same or a lighter
+  preset that second pass ends as ``no_gain``, so the image does not change
+  again; a heavier preset compresses it again.

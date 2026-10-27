@@ -35,6 +35,7 @@ from .housekeeping import check
 from .housekeeping import doctor
 from .housekeeping import pin
 from .housekeeping import PIN_ERROR
+from .presets import DEFAULT_MIN_GAIN
 from .presets import DEFAULT_PRESET
 from .presets import PRESET_NAMES
 from .runner import optimize
@@ -89,7 +90,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--min-gain",
         type=float,
         help="minimum fraction of bytes saved to keep a result, e.g. 0.05 "
-        "(default: 0.05 for PNG and JPEG, 0.10 for WebP)",
+        f"(default: {_min_gain_defaults()})",
     )
     sub.add_argument(
         "--dry-run", action="store_true", help="compress and report, but write nothing"
@@ -135,6 +136,18 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--json", action="store_true", help="print a JSON report")
     sub.set_defaults(handler=_setup)
     return parser
+
+
+_FORMAT_LABELS = {"png": "PNG", "jpeg": "JPEG", "webp": "WebP"}
+
+
+def _min_gain_defaults() -> str:
+    by_gain: dict[float, list[str]] = {}
+    for fmt, gain in DEFAULT_MIN_GAIN.items():
+        by_gain.setdefault(gain, []).append(_FORMAT_LABELS[fmt])
+    return ", ".join(
+        f"{gain:.2f} for {' and '.join(fmts)}" for gain, fmts in by_gain.items()
+    )
 
 
 def _add_paths(sub: argparse.ArgumentParser) -> None:

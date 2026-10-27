@@ -215,8 +215,12 @@ class TestPin:
 
 class TestDoctor:
     def test_problems_then_fixed(self, tmp_path, capsys):
+        gone = tmp_path / "gone.png"
+        gone.write_bytes(b"x")
+        main(["pin", str(gone)])
+        gone.unlink()
+        capsys.readouterr()
         orphan = tmp_path / "gone.png.json"
-        orphan.write_text("{}")
         temp = tmp_path / ".cover.png.ab12cd34.tmp"
         temp.write_bytes(b"x")
         pending = tmp_path / "new.jpg"

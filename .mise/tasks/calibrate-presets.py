@@ -2,10 +2,11 @@
 
 """
 Compress sample images with every preset, and write an HTML page for judging
-the presets by eye (design section 4.3): one section per image, with the
+the presets by eye (04-presets-and-calibration.md in the
+maintain-imgsqueeze-base skill): one section per image, with the
 original and each preset stacked below it.
 
-Usage: ``mise run calibrate [-- --input DIR] [-- --output DIR]``. The input
+Usage: ``mise run calibrate -- [--input DIR] [--output DIR]``. The input
 images are never modified. The page goes to ``tmp/calibration/index.html`` by
 default, which git ignores. The images go to ``images/`` next to it as
 ordinary files, mirroring the input tree: ``<input>/sub/cover.png`` becomes

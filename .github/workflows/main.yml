@@ -74,7 +74,8 @@ jobs:
           path: .venv
           key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('uv.lock') }}
       # Install mise without any tools, then the pinned pngquant and oxipng that
-      # imgsqueeze.tools resolves with "mise which --tool". Without them the PNG tests are skipped.
+      # imgsqueeze.tools resolves with "mise which --tool". The png_tools fixture
+      # would install them itself; doing it here keeps the install visible in the log.
       - name: "Install mise"
         uses: "jdx/mise-action@v5" # https://github.com/jdx/mise-action
         with:

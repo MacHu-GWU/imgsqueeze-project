@@ -43,6 +43,19 @@ def detect_format(data: bytes) -> str | None:
     return fmt
 
 
+def unsupported_reason(data: bytes) -> str:
+    """
+    Explain why an image that :func:`detect_format` rejected is not supported.
+
+    :param data: the whole file content.
+    :raises UnidentifiedImageError: if Pillow cannot open the data at all.
+    """
+    with Image.open(io.BytesIO(data)) as img:
+        if img.format == "MPO":
+            return "multi-picture JPEG (MPO) is not supported"
+        return f"{img.format} is not a PNG, JPEG or WebP image"
+
+
 def is_animated(data: bytes) -> bool:
     """
     Return whether the image has more than one frame, which imgsqueeze skips.

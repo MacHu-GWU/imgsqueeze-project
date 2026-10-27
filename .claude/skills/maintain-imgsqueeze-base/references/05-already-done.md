@@ -47,11 +47,13 @@ After the one pass, a result is kept only if `1 - after / before >= min_gain`. D
 
 | Format | Default | Why |
 | :--- | :--- | :--- |
-| PNG | 0.05 | A second pass measured 0%; any positive threshold is safe. |
+| PNG | 0.05 | A second pass with the same preset measured 0%; any positive threshold is safe. |
 | JPEG | 0.05 | Same. |
-| WebP | 0.10 | A second pass measured 6.7% to 7.7%. If a sidecar is lost and the image is processed again, 10% blocks a second lossy pass. |
+| WebP | 0.10 | A second pass with the same preset measured 6.7% to 7.7%. If a sidecar is lost and the image is processed again, 10% blocks a second lossy pass. |
 
 `--min-gain` (a fraction, like the JSON `gain`) overrides it for every format.
+
+These second-pass numbers hold for the same or a lighter preset. A heavier preset on an already compressed image is a real new pass: light then normal measured 13% to 19% more savings, so it ends as `optimized`. The sidecar normally prevents that; it only happens when the sidecar is lost.
 
 **Below the threshold, the original is kept, not the slightly smaller result** (the first idea was to keep the result). A few percent are not worth a lossy step, nor a meaningless binary change in git. The image is still marked done (`no_gain`), so it is never tried again. Example: `tests/img-raw/investing-in-the-public-benefit.webp` is already lossy WebP; re-encoding gives -13.9% (light), -5.1% (normal) and +5.9% (aggressive), so every preset ends as `no_gain`.
 

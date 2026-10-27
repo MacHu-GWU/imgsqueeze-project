@@ -153,6 +153,8 @@ def write_sidecar(image_path: Path, sidecar: Sidecar) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(dumps(sidecar))
+            f.flush()
+            os.fsync(f.fileno())
         os.chmod(tmp_name, 0o644)
         os.replace(tmp_name, path)
     except BaseException:

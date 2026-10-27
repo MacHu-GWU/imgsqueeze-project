@@ -149,7 +149,9 @@ def _apply_orientation(src: Path, dst: Path) -> bool:
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(args, capture_output=True, text=True, timeout=_TIMEOUT)
+        return subprocess.run(
+            args, capture_output=True, text=True, errors="replace", timeout=_TIMEOUT
+        )
     except subprocess.TimeoutExpired:
         raise PngEngineError(
             f"{' '.join(args)} timed out after {_TIMEOUT} seconds"

@@ -27,7 +27,7 @@ General test conventions (layout, run_cov_test, test writing) are in the `pywf-o
 
 ## 3. CI (deviates from the template)
 
-`.github/workflows/main.yml` runs **only `ubuntu-latest` with Python 3.12**, by the user's decision, instead of the template's Ubuntu and Windows times every Python version. Reasons: imgsqueeze targets macOS; Ubuntu is the closest runner where mise can install the binaries; Windows cannot run the fake-binary tests and is not a target.
+`.github/workflows/main.yml` runs **only on manual dispatch** (`workflow_dispatch`; the template's `push` and `pull_request` triggers stay commented out until the user decides to turn them on), and **only `ubuntu-latest` with Python 3.12**, by the user's decision, instead of the template's Ubuntu and Windows times every Python version. Reasons: imgsqueeze targets macOS; Ubuntu is the closest runner where mise can install the binaries; Windows cannot run the fake-binary tests and is not a target.
 
 - `jdx/mise-action@v5` with `install: false`, then `mise install conda:pngquant@3.0.3 oxipng@10.2.1`, so the PNG tests run in CI. These versions must match `PNGQUANT` and `OXIPNG` in `imgsqueeze/tools.py`.
 - `MISE_IGNORED_CONFIG_PATHS: ${{ github.workspace }}` makes mise ignore the repo's own `mise.toml`, whose `[env]` reads local secrets and whose `[tools]` are for the dev machine; Python comes from `actions/setup-python`.

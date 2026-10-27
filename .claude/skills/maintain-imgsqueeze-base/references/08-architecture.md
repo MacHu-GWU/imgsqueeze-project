@@ -43,8 +43,8 @@ cli._optimize -> runner.optimize -> discover.expand_inputs -> discover.triage
 | `no_gain` | written | gain < `min_gain`, original kept |
 | `already_done` | already there | sidecar matches; `sidecar_status` tells which kind |
 | `conflict` | no | the file changed during processing |
-| `unsupported` | no | `detect_format` returned `None` (GIF, BMP, ...), or the image is animated |
-| `error` | no | missing file, Pillow cannot open it (`UnidentifiedImageError`), an engine failed, a write failed, or the PNG tools are unavailable (`missing_tools=True`) |
+| `unsupported` | no | `detect_format` returned `None` (GIF, BMP, MPO, ...; `detect.unsupported_reason` says which), or the image is animated |
+| `error` | no | missing file, `<image>.json` that is not a valid sidecar, Pillow cannot open it (`UnidentifiedImageError`), an engine failed, a write failed, any unexpected exception, or the PNG tools are unavailable (`missing_tools=True`) |
 
 Format detection uses the content, never the extension: AI tools often save WebP as `.png`. A mismatch is processed as the real format, keeps its file name, and adds a warning.
 
@@ -56,7 +56,7 @@ Format detection uses the content, never the extension: AI tools often save WebP
 
 - `check`: triage only, never writes. Exit 1 while anything is pending, which is meant for a pre-commit hook.
 - `pin`: write a `pinned` sidecar (see `06-sidecar.md`).
-- `doctor`: walks folders (hidden and symlinked ones skipped) for orphan sidecars and leftover temp files (`_TEMP_PATTERN`), plus the pending images of `check`. `--delete-orphans` deletes orphans only; temp files are never deleted because a running process may own them.
+- `doctor`: walks folders (hidden and symlinked ones skipped) for orphan sidecars (only files that parse as sidecars) and leftover temp files (`_TEMP_PATTERN`), plus the pending images of `check`. `--delete-orphans` deletes orphans only; temp files are never deleted because a running process may own them.
 - `setup`: resolves both tools ahead of time.
 
 ---

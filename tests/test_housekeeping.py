@@ -10,12 +10,24 @@ from pathlib import Path
 
 import imgsqueeze.housekeeping as housekeeping_module
 from imgsqueeze.runner import optimize
+from imgsqueeze.sidecar import dumps
 from imgsqueeze.sidecar import read_sidecar
 from imgsqueeze.sidecar import sha256_file
+from imgsqueeze.sidecar import Sidecar
 from imgsqueeze.sidecar import sidecar_path
 
 JPEG = "blog-cover.jpg"
 WEBP = "investing-in-the-public-benefit.webp"  # already lossy: always no_gain
+SIDECAR = dumps(
+    Sidecar(
+        final_size=1,
+        original_size=1,
+        preset=None,
+        sha256="0" * 64,
+        status="pinned",
+        tool="imgsqueeze 0.0.0",
+    )
+).encode()
 
 
 def _make(path: Path, content: bytes = b"x") -> Path:
@@ -83,14 +95,20 @@ class TestPin:
         assert item.status == "already_done"
         assert read_sidecar(path) == before
 
-    def test_stale_or_invalid_sidecar_is_replaced(self, img_dir):
-        stale, invalid = img_dir / WEBP, img_dir / JPEG
+    def test_stale_sidecar_is_replaced(self, img_dir):
+        stale = img_dir / WEBP
         optimize([stale], jobs=1)
         stale.write_bytes(b"restored original")
-        sidecar_path(invalid).write_text("{", encoding="utf-8")
-        assert [item.status for item in pin([stale, invalid])] == ["pinned", "pinned"]
+        assert [item.status for item in pin([stale])] == ["pinned"]
         assert read_sidecar(stale).sha256 == sha256_file(stale)
-        assert read_sidecar(invalid).status == "pinned"
+
+    def test_foreign_json_is_never_overwritten(self, img_dir):
+        image = img_dir / JPEG
+        sidecar_path(image).write_text('{"prompt": "cat"}', encoding="utf-8")
+        (item,) = pin([image])
+        assert item.status == "error"
+        assert "move or delete it" in item.error
+        assert sidecar_path(image).read_text(encoding="utf-8") == '{"prompt": "cat"}'
 
     def test_any_file_can_be_pinned(self, tmp_path):
         gif = _make(tmp_path / "anim.gif", b"GIF89a")
@@ -122,17 +140,20 @@ class TestDoctor:
         assert report.ok is True
 
     def test_finds_every_problem(self, tmp_path):
-        orphan = _make(tmp_path / "sub" / "old.PNG.json", b"{}")
+        orphan = _make(tmp_path / "sub" / "old.PNG.json", SIDECAR)
+        hidden_orphan = _make(tmp_path / ".hidden.webp.json", SIDECAR)
         temps = [
             _make(tmp_path / ".cover.png.ab12cd34.tmp"),
             _make(tmp_path / "sub" / ".photo.jpg.json.zz99yy88.tmp"),
         ]
         pending = _make(tmp_path / "new.webp")
         _make(tmp_path / "notes.json")  # not a sidecar name
+        _make(tmp_path / "prompt.png.json", b'{"prompt": "cat"}')  # not a sidecar
+        _make(tmp_path / "._gone.png.json", b"\x00\x05\x16\x07")  # AppleDouble
         _make(tmp_path / ".hidden.tmp")  # not ours
         _make(tmp_path / ".git" / "gone.png.json")  # hidden folder is skipped
         report = doctor([tmp_path])
-        assert report.orphans == [orphan.resolve()]
+        assert report.orphans == sorted([orphan.resolve(), hidden_orphan.resolve()])
         assert report.deleted == []
         assert report.temp_files == sorted(t.resolve() for t in temps)
         assert report.pending == [pending.resolve()]
@@ -140,17 +161,31 @@ class TestDoctor:
         assert orphan.exists()
 
     def test_delete_orphans(self, tmp_path):
-        orphan = _make(tmp_path / "gone.jpeg.json", b"{}")
+        orphan = _make(tmp_path / "gone.jpeg.json", SIDECAR)
+        foreign = _make(tmp_path / "gone.png.json", b'{"prompt": "cat"}')
         image = _make(tmp_path / "kept.png")
         pin([image])
         report = doctor([tmp_path], delete_orphans=True)
         assert report.orphans == report.deleted == [orphan.resolve()]
         assert not orphan.exists()
+        assert foreign.exists()
         assert sidecar_path(image).exists()
         assert report.ok is True
 
+    def test_failed_delete_is_still_reported(self, tmp_path, monkeypatch):
+        orphan = _make(tmp_path / "gone.png.json", SIDECAR)
+
+        def fail(self, missing_ok=False):
+            raise PermissionError("read-only")
+
+        monkeypatch.setattr(Path, "unlink", fail)
+        report = doctor([tmp_path], delete_orphans=True)
+        assert report.orphans == [orphan.resolve()]
+        assert report.deleted == []
+        assert report.ok is False
+
     def test_symlinks_and_files_are_not_walked(self, tmp_path):
-        outside = _make(tmp_path / "outside" / "gone.png.json", b"{}")
+        outside = _make(tmp_path / "outside" / "gone.png.json", SIDECAR)
         root = tmp_path / "blog"
         root.mkdir()
         os.symlink(outside.parent, root / "linked-dir")

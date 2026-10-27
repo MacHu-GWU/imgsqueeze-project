@@ -72,10 +72,10 @@ Each image ends in one of these states:
       - Another process changed the image while it was compressed. Run again.
       - no
     * - ``unsupported``
-      - An animated image, or a format other than PNG, JPEG and WebP.
+      - An animated image, a multi-picture JPEG (MPO), or a format other than PNG, JPEG and WebP.
       - no
     * - ``error``
-      - The file is missing, cannot be decoded, a tool failed, or pngquant or oxipng is unavailable.
+      - The file is missing, cannot be decoded, a tool failed, pngquant or oxipng is unavailable, or ``<image>.json`` exists but is not a valid sidecar.
       - no
 
 The format comes from the file content, not its name. A WebP image saved as
@@ -145,7 +145,9 @@ Write a ``pinned`` sidecar for the current content of each image, so
 ``optimize`` skips it from now on. Use it for an image you want to keep
 exactly as it is. Any file can be pinned, including a format
 ``imgsqueeze`` does not support, which also keeps ``check`` quiet about it.
-An image whose sidecar already matches is left alone.
+An image whose sidecar already matches is left alone. If ``<image>.json``
+exists but is not an ``imgsqueeze`` sidecar, such as your own notes, it is
+never overwritten: the image is an error until you move that file.
 
 
 doctor
@@ -153,7 +155,8 @@ doctor
 
 Find problems in a folder:
 
-- **orphan sidecars**, whose image was renamed or deleted;
+- **orphan sidecars**, whose image was renamed or deleted (only files that
+  are valid sidecars count, so your own ``.json`` files are never touched);
 - **pending images**, as in ``check``;
 - **temporary files** left by an interrupted run, named like
   ``.cover.png.k3j9x2a1.tmp``.
@@ -161,7 +164,8 @@ Find problems in a folder:
 ``--delete-orphans`` deletes the orphan sidecars. Temporary files are only
 reported, because another run may still be using them. When you rename an
 image, rename its sidecar too; otherwise the image is compressed again as a
-new one, which normally ends as ``no_gain``.
+new one. With the same or a lighter preset that pass normally ends as
+``no_gain``; a heavier preset compresses it again.
 
 
 setup

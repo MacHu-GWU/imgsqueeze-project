@@ -59,10 +59,12 @@ Rejected: a SQLite database under `~/.cache` (also considered for locking). It w
 
 ```text
 no sidecar                    -> process
-sidecar cannot be parsed      -> process, with a warning
+sidecar cannot be parsed      -> error, the file is left alone
 sidecar.sha256 != sha256(img) -> process (the image was replaced or restored)
 sidecar.sha256 == sha256(img) -> done, skip
 ```
+
+An `<image>.json` that is not a valid sidecar may be the user's own file (an AI tool's prompt, say), so nothing ever overwrites it: `triage` marks the image pending with the parse error as its warning, `core.process` returns `error` ("move or delete it"), and `pin` returns `error`. A real sidecar that got corrupted (a merge conflict) also needs the user to delete it; that is the price of never destroying user data. Rejected: overwriting files whose keys look like a sidecar's, which is a fuzzy rule.
 
 There is no mtime + size shortcut: git checkout changes mtimes, so it is unreliable, and hashing a blog image takes milliseconds.
 
@@ -75,12 +77,12 @@ There is no mtime + size shortcut: git checkout changes mtimes, so it is unrelia
 1. Replace the image atomically (skipped for `no_gain`).
 2. Write the sidecar atomically.
 
-A crash between the two leaves a compressed image without a record. The next run processes it once more: PNG and JPEG measured a 0% second-pass gain and WebP a gain under its 10% threshold, so it ends as `no_gain` and the image does not change again. Accepted.
+A crash between the two leaves a compressed image without a record. The next run processes it once more. With the same or a lighter preset, PNG and JPEG measured a 0% second-pass gain and WebP a gain under its 10% threshold, so it ends as `no_gain` and the image does not change again. A heavier preset compresses it again (light then normal measured 13% to 19% more), which is what the user asked for. Accepted.
 
 ---
 
 ## 5. Orphans
 
-A sidecar whose image was renamed or deleted is an orphan: a `*.png.json`, `*.jpg.json`, `*.jpeg.json` or `*.webp.json` (any case) without its image. `imgsqueeze doctor` reports them, and deletes them with `--delete-orphans`. Renaming an image without its sidecar only costs one more pass, which ends as `no_gain` as in section 4.
+A sidecar whose image was renamed or deleted is an orphan: a `*.png.json`, `*.jpg.json`, `*.jpeg.json` or `*.webp.json` (any case) without its image. Only a file that parses as a sidecar is an orphan (`housekeeping._is_sidecar`), so `--delete-orphans` never deletes a user's JSON; hidden names count too, while `._*` AppleDouble files do not parse and are ignored. `imgsqueeze doctor` reports them, and deletes them with `--delete-orphans`; a failed delete leaves the orphan reported but not in `deleted`. Renaming an image without its sidecar only costs one more pass, which ends as `no_gain` as in section 4 (with the same or a lighter preset).
 
 Static site generators that copy the image folder copy the sidecars too; users exclude `*.json` in their site config if needed.

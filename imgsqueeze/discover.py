@@ -5,7 +5,8 @@ Expand the inputs into image files, then split them into pending and done.
 
 Files given directly are always included. Directories are searched
 recursively for image extensions, skipping hidden subdirectories such as
-``.git``. Symlinks are skipped everywhere: imgsqueeze only touches regular
+``.git`` and the ``._*`` metadata files macOS writes on non-Apple disks.
+Symlinks are skipped everywhere: imgsqueeze only touches regular
 files and directories.
 """
 
@@ -30,12 +31,13 @@ class Pending:
     """
     An image that still needs processing.
 
-    ``warning`` is set when its sidecar exists but cannot be used.
+    ``warning`` is set when its sidecar exists but cannot be used, or when
+    the file cannot be read.
     """
 
     # fmt: off
     path: Path  #: Real path of the file.
-    warning: str | None  #: Why the sidecar was ignored, or ``None``.
+    warning: str | None  #: Why the sidecar or the file cannot be used, or ``None``.
     # fmt: on
 
 
@@ -89,8 +91,8 @@ def triage(paths: list[Path]) -> Triage:
     Split the paths into pending images and images whose sidecar matches.
 
     A path that is not a regular file, or cannot be read, is pending, so the
-    worker reports the real error. A sidecar that cannot be parsed is ignored,
-    and the image is pending with a warning saying why.
+    worker reports the real error; its warning says why. A sidecar that cannot
+    be parsed makes the image pending, with a warning saying why.
 
     :param paths: real paths, as returned by :func:`expand_inputs`.
     """
@@ -98,7 +100,8 @@ def triage(paths: list[Path]) -> Triage:
     done: list[Done] = []
     for path in paths:
         if not path.is_file():
-            pending.append(Pending(path=path, warning=None))
+            reason = "is not a regular file" if path.exists() else "does not exist"
+            pending.append(Pending(path=path, warning=f"{path} {reason}"))
             continue
         try:
             digest = sha256_file(path)
@@ -106,8 +109,8 @@ def triage(paths: list[Path]) -> Triage:
         except InvalidSidecarError as e:
             pending.append(Pending(path=path, warning=str(e)))
             continue
-        except OSError:
-            pending.append(Pending(path=path, warning=None))
+        except OSError as e:
+            pending.append(Pending(path=path, warning=f"cannot read: {e}"))
             continue
         if sidecar is None:
             pending.append(Pending(path=path, warning=None))
@@ -128,6 +131,8 @@ def _walk_images(top: Path) -> list[Path]:
         )
         for name in sorted(filenames):
             path = Path(root) / name
+            if name.startswith("._"):
+                continue  # AppleDouble metadata, not an image
             if name.lower().endswith(IMAGE_SUFFIXES) and not path.is_symlink():
                 found.append(path)
     return found

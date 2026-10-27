@@ -23,6 +23,7 @@ from .discover import IMAGE_SUFFIXES
 from .discover import triage
 from .sidecar import find_done
 from .sidecar import InvalidSidecarError
+from .sidecar import read_sidecar
 from .sidecar import sha256_file
 from .sidecar import Sidecar
 from .sidecar import STATUS_PINNED
@@ -53,7 +54,7 @@ class CheckItem:
     path: Path  #: Real path of the image.
     done: bool  #: ``True`` when its sidecar matches its content.
     sidecar_status: str | None  #: Status in the matching sidecar, when done.
-    warning: str | None  #: Why an existing sidecar was ignored.
+    warning: str | None  #: Why an existing sidecar or the file cannot be used.
     # fmt: on
 
 
@@ -77,7 +78,7 @@ class DoctorReport:
     """
 
     # fmt: off
-    orphans: list[Path]  #: Sidecars whose image no longer exists.
+    orphans: list[Path]  #: Valid sidecars whose image no longer exists.
     deleted: list[Path]  #: Orphans that were deleted.
     pending: list[Path]  #: Images with no matching sidecar.
     temp_files: list[Path]  #: Temporary files left by an interrupted run.
@@ -118,7 +119,9 @@ def pin(inputs: list[Path]) -> list[PinItem]:
     """
     Write a ``pinned`` sidecar for each image, so it is never compressed.
 
-    An image whose sidecar already matches is left alone. Any file can be
+    An image whose sidecar already matches is left alone, and an existing
+    ``<image>.json`` that is not a valid sidecar is never overwritten: that
+    image is an ``error``. Any file can be
     pinned, including one imgsqueeze does not support, such as a GIF given
     directly, which keeps ``check`` from reporting it.
 
@@ -131,7 +134,9 @@ def doctor(inputs: list[Path], delete_orphans: bool = False) -> DoctorReport:
     """
     Find orphan sidecars, pending images, and leftover temporary files.
 
-    Temporary files are only reported: another run may still be using them.
+    Only a ``.json`` file that parses as a sidecar counts as an orphan, so a
+    user's own JSON file next to a deleted image is never deleted. Temporary
+    files are only reported: another run may still be using them.
 
     :param inputs: directories to inspect, searched recursively like
         ``optimize`` (hidden and symlinked directories are skipped).
@@ -143,14 +148,17 @@ def doctor(inputs: list[Path], delete_orphans: bool = False) -> DoctorReport:
         name = path.name
         if _TEMP_PATTERN.match(name):
             temp_files.append(path)
-        elif name.lower().endswith(_SIDECAR_SUFFIXES) and not name.startswith("."):
+        elif name.lower().endswith(_SIDECAR_SUFFIXES):
             image = path.with_name(name[: -len(".json")])
-            if not image.exists():
+            if not image.exists() and _is_sidecar(image):
                 orphans.append(path)
     deleted: list[Path] = []
     if delete_orphans:
         for orphan in orphans:
-            orphan.unlink(missing_ok=True)
+            try:
+                orphan.unlink(missing_ok=True)
+            except OSError:
+                continue  # still reported as an orphan
             deleted.append(orphan)
     pending = [item.path for item in check(inputs) if not item.done]
     return DoctorReport(
@@ -166,8 +174,12 @@ def _pin_one(path: Path) -> PinItem:
         try:
             if find_done(path, digest) is not None:
                 return PinItem(path=path, status=PIN_ALREADY_DONE, error=None)
-        except InvalidSidecarError:
-            pass  # replaced below
+        except InvalidSidecarError as e:
+            return PinItem(
+                path=path,
+                status=PIN_ERROR,
+                error=f"{e}; move or delete it to pin the image",
+            )
         size = path.stat().st_size
         sidecar = Sidecar(
             final_size=size,
@@ -181,6 +193,13 @@ def _pin_one(path: Path) -> PinItem:
     except OSError as e:
         return PinItem(path=path, status=PIN_ERROR, error=str(e))
     return PinItem(path=path, status=PIN_PINNED, error=None)
+
+
+def _is_sidecar(image: Path) -> bool:
+    try:
+        return read_sidecar(image) is not None
+    except (InvalidSidecarError, OSError):
+        return False
 
 
 def _walk_files(inputs: list[Path]) -> list[Path]:

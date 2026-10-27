@@ -26,7 +26,7 @@ The PNG engines of `02-compression-engines.md` need two binaries. Everything els
 ## 2. Resolution order (`resolve_tool`)
 
 1. **Override variable.** When set, the path must be an executable file whose `--version` is at least the pinned version, compared as integer tuples (10.10.0 > 10.2.1). Otherwise it is an error: there is **no fallback** to mise, so a typo is never silently ignored.
-2. **`mise which <name> --tool <mise_tool>@<version>`.** It looks only at that exact version, ignoring the global config and any `mise.toml` in the current folder.
+2. **`mise which <name> --tool <mise_tool>@<version>`.** It picks that exact version whatever the config says. mise still **parses** the `mise.toml` of the current folder and its parents, and fails on one that is broken or untrusted (an `[env]` section is enough), which would break every PNG in such a blog repo. So `tools._run` runs every command in a fresh empty `tempfile.TemporaryDirectory` (`cwd=`). `tests/test_tools.py::test_project_mise_config_is_not_read` guards this.
 3. **`mise install <mise_tool>@<version>`**, then step 2 again.
 4. **`<binary> --version`** gives the version reported in `ResolvedTool` and the JSON `tools` field.
 

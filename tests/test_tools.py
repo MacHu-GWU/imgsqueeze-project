@@ -14,7 +14,8 @@ from pathlib import Path
 import imgsqueeze.tools as tools_module
 
 # The fakes below are executable Python scripts with a shebang, which Windows
-# cannot run directly. imgsqueeze only targets macOS (design section 1.3).
+# cannot run directly. imgsqueeze only targets macOS (01-scope.md in the
+# maintain-imgsqueeze-base skill).
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX only")
 
 _FAKE_MISE = """#!{python}
@@ -24,6 +25,10 @@ import pathlib
 import sys
 
 state = pathlib.Path(os.environ["FAKE_MISE_STATE"])
+if pathlib.Path("mise.toml").exists():
+    # like mise with an untrusted or broken config in the current directory
+    print("mise ERROR Config files in mise.toml are not trusted", file=sys.stderr)
+    sys.exit(1)
 with (state / "calls.log").open("a") as f:
     f.write(" ".join(sys.argv[1:]) + "\\n")
 
@@ -116,6 +121,13 @@ class TestResolveWithMise:
             "which pngquant --tool conda:pngquant@3.0.3",
         ]
 
+    def test_project_mise_config_is_not_read(self, fake_mise, tmp_path, monkeypatch):
+        project = tmp_path / "blog"
+        project.mkdir()
+        (project / "mise.toml").write_text("[env]\n_.file = '.env'\n")
+        monkeypatch.chdir(project)
+        assert resolve_tool(PNGQUANT).version == "3.0.3"
+
     def test_installed_tool_is_not_installed_again(self, fake_mise):
         first = resolve_tool(OXIPNG)
         (fake_mise / "calls.log").unlink()
@@ -198,6 +210,12 @@ class TestResolveOverride:
         monkeypatch.setenv(PNGQUANT.env_var, str(binary))
         with pytest.raises(ToolUnavailableError, match="cannot run"):
             resolve_tool(PNGQUANT)
+
+    def test_override_with_non_utf8_output(self, tmp_path, no_mise, monkeypatch):
+        body = "import sys\nsys.stdout.buffer.write(b'\\xffpngquant 3.0.3\\n')"
+        binary = _make_script(tmp_path / "pngquant", body)
+        monkeypatch.setenv(PNGQUANT.env_var, str(binary))
+        assert resolve_tool(PNGQUANT).version == "3.0.3"
 
     def test_override_times_out(self, tmp_path, no_mise, monkeypatch):
         binary = _make_script(tmp_path / "pngquant", "import time\ntime.sleep(5)")

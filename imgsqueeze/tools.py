@@ -4,9 +4,14 @@
 Locate the external pngquant and oxipng binaries through mise.
 
 imgsqueeze never downloads a binary itself. Each tool is pinned to one
-version and located with ``mise which --tool``, which ignores the global and
-project mise config. A missing version is installed with ``mise install``,
-which changes no config file. mise itself must already be installed.
+version and located with ``mise which --tool``, which picks that version
+whatever the mise config says. A missing version is installed with
+``mise install``, which changes no config file. mise itself must already be
+installed.
+
+mise still parses the ``mise.toml`` of the current directory and its parents,
+and fails on one that is broken or not trusted, so every command runs in an
+empty temporary directory instead of the user's project.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 
 from pathlib import Path
 
@@ -177,7 +183,15 @@ def _run(
     spec: ToolSpec, args: list[str], timeout: float
 ) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        with tempfile.TemporaryDirectory(prefix="imgsqueeze-") as cwd:
+            return subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                errors="replace",
+                timeout=timeout,
+                cwd=cwd,
+            )
     except subprocess.TimeoutExpired:
         raise ToolUnavailableError(
             _explain(spec, f"{' '.join(args)} timed out after {timeout} seconds")

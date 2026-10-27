@@ -23,10 +23,16 @@ Compress
 
     import imgsqueeze.api as imgsqueeze
 
-    report = imgsqueeze.optimize([Path("~/blog/images").expanduser()], preset="normal")
-    for result in report.results:
-        print(result.status, result.path, result.before, result.after, result.gain)
-    print(report.summary)  # {"total": 3, "optimized": 2, ..., "bytes_saved": 390991}
+    if __name__ == "__main__":
+        report = imgsqueeze.optimize([Path("~/blog/images").expanduser()], preset="normal")
+        for result in report.results:
+            print(result.status, result.path, result.before, result.after, result.gain)
+        print(report.summary)  # {"total": 3, "optimized": 2, ..., "bytes_saved": 390991}
+
+- ``optimize`` compresses several images in worker processes. On macOS and
+  Windows a worker starts by importing your script again, so call
+  ``optimize`` from a script under ``if __name__ == "__main__":``, as above;
+  otherwise it fails with ``RuntimeError``.
 
 - Each :class:`~imgsqueeze.core.Result` has a ``status`` from
   :attr:`~imgsqueeze.core.RESULT_STATUSES`, such as

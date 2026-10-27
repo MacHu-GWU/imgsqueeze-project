@@ -68,7 +68,7 @@ JSON: `{"results": [{"path", "done", "sidecar_status", "warning"}], "summary": {
 
 ## pin
 
-Write a `pinned` sidecar for the current content; `optimize` then skips it. A matching sidecar is left alone. Any file can be pinned.
+Write a `pinned` sidecar for the current content; `optimize` then skips it. A matching sidecar is left alone; a `.json` that is not a valid sidecar is never overwritten (`error`). Any file can be pinned.
 
 ```console
 $ imgsqueeze pin /abs/blog/images/diagram.png
@@ -79,7 +79,7 @@ JSON: `{"results": [{"path", "status": "pinned" | "already_done" | "error", "err
 
 ## doctor
 
-Report orphan sidecars (image renamed or deleted), pending images, and leftover `.<name>.<random>.tmp` files.
+Report orphan sidecars (valid sidecars whose image was renamed or deleted), pending images, and leftover `.<name>.<random>.tmp` files.
 
 | flag | default | meaning |
 |---|---|---|

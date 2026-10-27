@@ -26,17 +26,22 @@ Compresses every image whose sidecar does not match its current content, in a pr
 - Format comes from the content, not the extension; a mismatch adds a warning and keeps the file name.
 - A result saving less than `min_gain` is discarded (`no_gain`), the original stays, and a `no_gain` sidecar is still written.
 - An image changed by another process while compressed is left alone (`conflict`; run again).
+- An existing `<image>.json` that is not a valid sidecar is never overwritten: that image is `error` until the user moves the file.
+- A multi-picture JPEG (MPO, from some phones and cameras) is `unsupported`.
 - pngquant and oxipng are resolved once, and only when a pending image is a PNG. If unavailable, every PNG is `error` with `missing_tools=True` and the full fix-it message in `error`; other formats are processed normally.
 - Raises `ValueError` only for an unknown preset, `min_gain` outside 0..1, or `jobs < 1`.
 
 ```python
-report = imgsqueeze.optimize([Path("/abs/blog/images")], preset="normal")
-for r in report.results:
-    print(r.status, r.path, r.before, r.after, r.gain, r.warnings)
-report.summary        # {"total": 4, "optimized": 1, "no_gain": 1, ..., "error": 2, "bytes_saved": 343247}
-report.missing_tools  # True -> the CLI exits with 3
-report.tools          # [ResolvedTool(name="pngquant", ...), ...] when a PNG was compressed, else []
+if __name__ == "__main__":  # required in a script: workers re-import it (spawn)
+    report = imgsqueeze.optimize([Path("/abs/blog/images")], preset="normal")
+    for r in report.results:
+        print(r.status, r.path, r.before, r.after, r.gain, r.warnings)
+    report.summary        # {"total": 4, "optimized": 1, "no_gain": 1, ..., "error": 2, "bytes_saved": 343247}
+    report.missing_tools  # True -> the CLI exits with 3
+    report.tools          # [ResolvedTool(name="pngquant", ...), ...] when a PNG was compressed, else []
 ```
+
+Without the `__main__` guard, a script that processes two or more images fails with `RuntimeError` on macOS and Windows.
 
 ## Report
 
@@ -88,7 +93,7 @@ class CheckItem:
     path: Path
     done: bool                  # sidecar matches the content
     sidecar_status: str | None  # when done
-    warning: str | None         # why an existing sidecar was ignored (invalid JSON, ...)
+    warning: str | None         # why it is pending: invalid sidecar, missing or unreadable file
 ```
 
 Hashes only; never writes. A missing file or an unsupported format given directly is never done unless pinned.
@@ -109,7 +114,7 @@ class PinItem:
     error: str | None
 ```
 
-Writes a `pinned` sidecar (`preset=None`, sizes = current size) for the current content. A sidecar that already matches is left alone (`already_done`); a stale or invalid one is replaced. Any file can be pinned, including unsupported formats, which keeps `check` quiet about them.
+Writes a `pinned` sidecar (`preset=None`, sizes = current size) for the current content. A sidecar that already matches is left alone (`already_done`); a stale one is replaced; a `.json` that is not a valid sidecar is never overwritten (`error`). Any file can be pinned, including unsupported formats, which keeps `check` quiet about them.
 
 ## doctor
 
@@ -118,14 +123,14 @@ doctor(inputs: list[Path], delete_orphans: bool = False) -> DoctorReport
 
 @dataclass(frozen=True)
 class DoctorReport:
-    orphans: list[Path]     # *.png.json etc. whose image no longer exists
+    orphans: list[Path]     # valid sidecars (*.png.json etc.) whose image no longer exists
     deleted: list[Path]     # orphans deleted (delete_orphans=True)
     pending: list[Path]     # images not done, as in check
     temp_files: list[Path]  # .<name>.<random>.tmp left by an interrupted run
     ok -> bool              # nothing left to fix (deleted orphans count as fixed)
 ```
 
-Only folders are walked for orphans and temp files (hidden and symlinked folders skipped). Temp files are reported, never deleted.
+Only folders are walked for orphans and temp files (hidden and symlinked folders skipped). A `.json` that does not parse as a sidecar is never an orphan. Temp files are reported, never deleted. An orphan that cannot be deleted stays in `orphans` but not in `deleted`.
 
 ## Presets
 

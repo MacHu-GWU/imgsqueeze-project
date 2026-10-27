@@ -30,6 +30,8 @@ Read ../maintain-imgsqueeze-base/SKILL.md, then:
 - `.claude/skills/pypi-imgsqueeze/ref/public-api.md` (the presets table).
 - `.claude/skills/maintain-imgsqueeze-base/references/04-presets-and-calibration.md`: the table, and the calibration date and outcome.
 
+If `DEFAULT_MIN_GAIN` changed, also: `docs/source/02-Command-Line/index.rst` (the `--min-gain` row), `.claude/skills/pypi-imgsqueeze/SKILL.md` and `ref/cli.md`, and `05-already-done.md` section 3. The `--min-gain` help text is built from `DEFAULT_MIN_GAIN` and needs no change. Find any other copy with `grep -rn "0\.10" docs README.rst .claude/skills/pypi-imgsqueeze .claude/skills/maintain-imgsqueeze-base`.
+
 Already compressed images are not affected: their sidecars make them done whatever the preset. Say so to the user; to apply new values to an image, they restore its original first.
 
 ## Step 4: Verify and report
