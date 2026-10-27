@@ -47,7 +47,7 @@ jobs:
         # imgsqueeze targets macOS. Ubuntu is the closest runner where mise can install
         # pngquant and oxipng, so CI runs only there, and only on the dev Python.
         os: ["ubuntu-latest"]
-        python-version: ["3.12"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       # Check out the repository code to the runner
       - uses: "actions/checkout@v7" # https://github.com/marketplace/actions/checkout
