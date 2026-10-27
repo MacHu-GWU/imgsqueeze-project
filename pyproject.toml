@@ -36,6 +36,7 @@ classifiers = [
 # --- Dependencies ---
 # Edit these lists, then ``mise run inst`` to update ``uv.lock`` and ``.venv``.
 dependencies = [
+    "pillow>=12.0.0,<13.0.0", # JPEG and WebP codecs, format detection
 ]
 
 # --- Optional dependencies (extras) ---
