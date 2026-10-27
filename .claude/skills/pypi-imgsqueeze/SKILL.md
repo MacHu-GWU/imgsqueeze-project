@@ -1,6 +1,6 @@
 ---
 name: pypi-imgsqueeze
-description: Python library and CLI imgsqueeze (v0.1.1) — compress the PNG, JPEG and WebP images of a blog once, in place, and record each finished image in a <image>.json sidecar so it is never compressed again. Use after adding or replacing blog images, or to check, pin, or clean up compressed images. Public API: optimize, check, pin, doctor, Report, Result, get_preset, read_sidecar.
+description: "Python library and CLI imgsqueeze (v0.1.1) — compress the PNG, JPEG and WebP images of a blog once, in place, and record each finished image in a <image>.json sidecar so it is never compressed again. Use after adding or replacing blog images, or to check, pin, or clean up compressed images. Public API: optimize, check, pin, doctor, Report, Result, get_preset, read_sidecar."
 ---
 
 # imgsqueeze
