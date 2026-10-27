@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
 
 """
-Compress sample images with every preset, and write a side-by-side HTML page
-for judging the presets by eye (design section 4.3).
+Compress sample images with every preset, and write an HTML page for judging
+the presets by eye (design section 4.3): one section per image, with the
+original and each preset stacked below it.
 
 Usage: ``mise run calibrate [-- --input DIR] [-- --output DIR]``. The input
 images are never modified. The page goes to ``tmp/calibration/index.html`` by
-default, which git ignores. It embeds every image, so the one file can be
-opened or shared anywhere. Every preset is shown, even when ``min_gain``
-would keep the original.
+default, which git ignores, and the images it shows go to ``images/`` next
+to it, as ordinary files that can be opened on their own. Every preset is
+shown, even when ``min_gain`` would keep the original.
 """
 
 import argparse
-import base64
 import html
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -37,31 +38,26 @@ _PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>imgsqueeze preset calibration</title>
 <style>
-  body {{ font: 14px/1.4 -apple-system, sans-serif; margin: 16px; background: #f4f4f4; color: #222; }}
-  h1 {{ font-size: 20px; }}
-  h2 {{ font-size: 16px; margin-top: 32px; }}
-  .row {{ display: flex; gap: 12px; overflow-x: auto; }}
-  figure {{ margin: 0; flex: 0 0 auto; background: #fff; padding: 8px; border-radius: 6px; }}
-  figcaption {{ margin-bottom: 6px; }}
-  .box {{ overflow: auto; max-width: 640px; max-height: 480px; background:
-      repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0 / 16px 16px; }}
-  .fit .box img {{ max-width: 100%; }}
-  .fit .box {{ max-height: none; }}
+  body {{ font: 15px/1.5 -apple-system, sans-serif; margin: 24px auto; max-width: 1400px;
+         padding: 0 16px; background: #f4f4f4; color: #222; }}
+  section {{ margin-top: 48px; border-top: 2px solid #ccc; }}
+  h3 {{ margin: 24px 0 8px; font-size: 15px; }}
+  img {{ display: block; max-width: 100%; height: auto; background:
+         repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0 / 16px 16px; }}
   .rejected {{ color: #a33; }}
   .kept {{ color: #282; }}
 </style>
 </head>
 <body>
 <h1>imgsqueeze preset calibration</h1>
-<p>Images are shown at 1:1. Hover a compressed image to see the original in
-its place. <label><input type="checkbox" id="fit"> fit to width</label></p>
+<p>One section per image: the original, then each preset. Images wider than
+the page are scaled down. Hover a compressed image to see the original in its
+place.</p>
 {sections}
 <script>
-  document.getElementById("fit").addEventListener("change", (e) =>
-    document.body.classList.toggle("fit", e.target.checked));
   for (const img of document.querySelectorAll("img[data-compressed]")) {{
     const own = img.src;
-    const original = img.closest(".row").querySelector("img").src;
+    const original = img.closest("section").querySelector("img").src;
     img.addEventListener("mouseenter", () => (img.src = original));
     img.addEventListener("mouseleave", () => (img.src = own));
   }}
@@ -81,10 +77,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    args.output.mkdir(parents=True, exist_ok=True)
+    images = args.output / "images"
+    if images.exists():
+        shutil.rmtree(images)  # only the folder this script owns
+    images.mkdir(parents=True)
     png_tools = None
     sections = []
-    for src in expand_inputs([args.input]):
+    for index, src in enumerate(expand_inputs([args.input]), start=1):
         data = src.read_bytes()
         fmt = detect_format(data)
         if fmt is None:
@@ -92,9 +91,15 @@ def main() -> None:
             continue
         if fmt == "png" and png_tools is None:
             png_tools = (resolve_tool(PNGQUANT).path, resolve_tool(OXIPNG).path)
-        original = _data_uri(fmt, data)
+        folder = images / f"{index:02d}-{src.stem}"
+        folder.mkdir()
+        suffix = src.suffix.lower()
+        original = folder / f"original{suffix}"
+        original.write_bytes(data)
         before = len(data)
-        figures = [_figure("original", original, False, f"{before:,} bytes")]
+        figures = [
+            _figure("original", _url(original, args.output), False, _size(before))
+        ]
         for preset in PRESETS.values():
             with tempfile.TemporaryDirectory() as tmp:
                 workdir = Path(tmp)
@@ -104,37 +109,46 @@ def main() -> None:
                     out = compress_jpeg(src, workdir, preset).path
                 else:
                     out = compress_webp(src, workdir, preset).path
-                compressed = out.read_bytes()
-            name = _data_uri(fmt, compressed)
-            after = len(compressed)
+                result = folder / f"{preset.name}{suffix}"
+                shutil.copyfile(out, result)
+            after = result.stat().st_size
             gain = 1 - after / before
             verdict = (
                 '<span class="kept">kept</span>'
                 if gain >= DEFAULT_MIN_GAIN[fmt]
                 else '<span class="rejected">below min_gain, original kept</span>'
             )
-            info = f"{after:,} bytes, {gain:.1%} saved, {verdict}"
-            figures.append(_figure(preset.name, name, True, info))
+            change = f"{gain:.1%} saved" if gain >= 0 else f"{-gain:.1%} larger"
+            info = f"{_size(after)}, {change}, {verdict}"
+            figures.append(_figure(preset.name, _url(result, args.output), True, info))
             print(f"{preset.name:<10} {gain:7.1%}  {src.name}")
         sections.append(
-            f"<h2>{html.escape(src.name)} ({fmt})</h2>\n"
-            f'<div class="row">\n{"".join(figures)}</div>\n'
+            f"<section>\n<h2>{html.escape(src.name)} ({fmt})</h2>\n"
+            f"{''.join(figures)}</section>\n"
         )
     page = args.output / "index.html"
     page.write_text(_PAGE.format(sections="\n".join(sections)), encoding="utf-8")
     print(f"open {page}")
 
 
-def _data_uri(fmt: str, data: bytes) -> str:
-    return f"data:image/{fmt};base64,{base64.b64encode(data).decode('ascii')}"
+def _url(path: Path, page_dir: Path) -> str:
+    return html.escape(path.relative_to(page_dir).as_posix())
+
+
+def _size(size: int) -> str:
+    """
+    ``950 B``, ``93.2 KB`` or ``1.4 MB`` (1 KB = 1024 bytes).
+    """
+    if size < 1024:
+        return f"{size} B"
+    if round(size / 1024, 1) < 1024:  # so 1048575 bytes is 1.0 MB, not 1024.0 KB
+        return f"{size / 1024:.1f} KB"
+    return f"{size / 1024 / 1024:.1f} MB"
 
 
 def _figure(label: str, src: str, compressed: bool, info: str) -> str:
     hover = " data-compressed" if compressed else ""
-    return (
-        f"<figure><figcaption><b>{label}</b><br>{info}</figcaption>"
-        f'<div class="box"><img src="{src}" alt="{label}"{hover}></div></figure>\n'
-    )
+    return f'<h3>{label}: {info}</h3>\n<img src="{src}" alt="{label}"{hover}>\n'
 
 
 if __name__ == "__main__":

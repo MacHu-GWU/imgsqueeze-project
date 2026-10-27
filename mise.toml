@@ -57,7 +57,7 @@ description = "👀📊 Open code coverage HTML report in browser (requires 'cov
 run = "open htmlcov/index.html"
 
 [tasks.calibrate]
-description = "👀🖼️ Compress sample images with every preset into a side-by-side HTML page (tmp/calibration/)"
+description = "👀🖼️ Compress sample images with every preset into an HTML page (tmp/calibration/index.html)"
 run = ".venv/bin/python .mise/tasks/calibrate-presets.py"
 depends = ["inst"]
 
